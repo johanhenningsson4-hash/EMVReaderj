@@ -230,7 +230,7 @@ namespace EMVCard
             this.bLoadPSE.Name = "bLoadPSE";
             this.bLoadPSE.Size = new System.Drawing.Size(121, 45);
             this.bLoadPSE.TabIndex = 34;
-            this.bLoadPSE.Text = "Load PSE\r\n接触式";
+            this.bLoadPSE.Text = "Load PSE\r\n(Contact)";
             this.bLoadPSE.UseVisualStyleBackColor = true;
             this.bLoadPSE.Click += new System.EventHandler(this.bLoadPSE_Click);
             // 
@@ -240,7 +240,7 @@ namespace EMVCard
             this.bLoadPPSE.Name = "bLoadPPSE";
             this.bLoadPPSE.Size = new System.Drawing.Size(136, 44);
             this.bLoadPPSE.TabIndex = 35;
-            this.bLoadPPSE.Text = "Load PPSE\r\n非接触";
+            this.bLoadPPSE.Text = "Load PPSE\r\n(Contactless)";
             this.bLoadPPSE.UseVisualStyleBackColor = true;
             this.bLoadPPSE.Click += new System.EventHandler(this.bLoadPPSE_Click);
             // 
