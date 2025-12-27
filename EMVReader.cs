@@ -33,10 +33,13 @@ namespace EMVCard
         public Int64 SendLen, RecvLen, nBytesRet;
         public ModWinsCard64.SCARD_IO_REQUEST pioSendRequest;
         private Dictionary<string, string> labelToAID = new Dictionary<string, string>();
+        private Logger logger = Logger.Instance;
 
 
         public MainEMVReaderBin() {
             InitializeComponent();
+            logger.SetLogTextBox(richTextBoxLogs);
+            logger.Info("EMV Card Reader application started");
         }
 
         private void ClearBuffers() {
@@ -76,21 +79,27 @@ namespace EMVCard
         }
 
         private void bInit_Click(object sender, EventArgs e) {
+            logger.LogSeparator("Initialize PC/SC Context");
             string ReaderList = "" + Convert.ToChar(0);
             int indx;
             int pcchReaders = 0;
             string rName = "";
 
             // 1. Establish Context
+            logger.Debug("Establishing PC/SC context...");
             retCode = ModWinsCard64.SCardEstablishContext(ModWinsCard64.SCARD_SCOPE_USER, 0, 0, ref hContext);
             if (retCode != ModWinsCard64.SCARD_S_SUCCESS) {
+                logger.Error($"Failed to establish context. Error code: {retCode:X}");
                 displayOut(1, retCode, "");
                 return;
             }
+            logger.Info("PC/SC context established successfully");
 
             // 2. List PC/SC card readers installed in the system
+            logger.Debug("Listing available card readers...");
             retCode = ModWinsCard64.SCardListReaders(this.hContext, null, null, ref pcchReaders);
             if (retCode != ModWinsCard64.SCARD_S_SUCCESS) {
+                logger.Error($"Failed to list readers. Error code: {retCode:X}");
                 displayOut(1, retCode, "");
                 return;
             }
@@ -102,6 +111,7 @@ namespace EMVCard
             // Fill reader list
             retCode = ModWinsCard64.SCardListReaders(this.hContext, null, ReadersList, ref pcchReaders);
             if (retCode != ModWinsCard64.SCARD_S_SUCCESS) {
+                logger.Error($"Failed to retrieve reader list. Error code: {retCode:X}");
                 displayOut(1, retCode, "");
                 return;
             }
@@ -118,12 +128,17 @@ namespace EMVCard
 
                 // Add reader name to list
                 cbReader.Items.Add(rName);
+                logger.Info($"Reader found: {rName}");
                 rName = "";
                 indx = indx + 1;
             }
 
-            if (cbReader.Items.Count > 0)
+            if (cbReader.Items.Count > 0) {
                 cbReader.SelectedIndex = 0;
+                logger.Info($"Total readers found: {cbReader.Items.Count}");
+            } else {
+                logger.Warning("No card readers found");
+            }
         }
 
         private int SendAPDUandDisplay() {
@@ -139,9 +154,11 @@ namespace EMVCard
                 tmpStr = tmpStr + " " + string.Format("{0:X2}", SendBuff[indx]);
             }
             displayOut(2, 0, tmpStr);
+            logger.LogAPDUCommand(SendBuff, (int)SendLen);
 
             retCode = ModWinsCard64.SCardTransmit(hCard, ref pioSendRequest, SendBuff, SendLen, ref pioSendRequest, RecvBuff, ref RecvLen);
             if (retCode != ModWinsCard64.SCARD_S_SUCCESS) {
+                logger.Error($"APDU transmission failed. Error code: {retCode:X}");
                 displayOut(1, retCode, "");
                 return retCode;
             }
@@ -151,12 +168,14 @@ namespace EMVCard
                     tmpStr = tmpStr + " " + string.Format("{0:X2}", RecvBuff[indx]);
                 }
                 displayOut(3, 0, tmpStr.Trim());
+                logger.LogAPDUResponse(RecvBuff, (int)RecvLen);
             }
 
             return retCode;
         }
 
         private void bReadApp_Click(object sender, EventArgs e) {
+            logger.LogSeparator("Read Application Data");
             textCardNum.Text = "";
             textEXP.Text = "";
             textHolder.Text = "";
@@ -164,56 +183,70 @@ namespace EMVCard
 
             string selectedLabel = cbPSE.Text.Trim();
             if (!labelToAID.ContainsKey(selectedLabel)) {
+                logger.Warning("No application AID selected");
                 displayOut(0, 0, "Please select an application AID");
                 return;
             }
 
             string aidHex = labelToAID[selectedLabel];
+            logger.Info($"Selected AID: {aidHex}");
             string[] aidBytes = aidHex.Split(' ');
             string selectAID = $"00 A4 04 00 {aidBytes.Length:X2} {aidHex}";
             SendLen = FillBufferFromHexString(selectAID, SendBuff, 0);
             RecvLen = 0xFF;
 
+            logger.Debug("Selecting application AID...");
             int result = TransmitWithAutoFix();
             if (result != 0 || !(RecvBuff[RecvLen - 2] == 0x90 && RecvBuff[RecvLen - 1] == 0x00)) {
+                logger.Error("Failed to select AID");
                 displayOut(0, 0, "Select AID Failed");
                 return;
             }
+            logger.Info("AID selected successfully");
 
             byte[] fciData = new byte[RecvLen];
             Array.Copy(RecvBuff, fciData, RecvLen);
 
             // === Send GPO and auto-construct PDOL ===
+            logger.Debug("Sending GPO command...");
             bool gpoSuccess = SendGPOWithAutoPDOL(fciData, RecvLen);
             if (!gpoSuccess) {
+                logger.Warning("GPO command failed, attempting to read records directly");
                 displayOut(0, 0, "Send GPO Failed");
                 // Don't return here, continue trying to read data
             }
 
             // If GPO succeeds, try to parse data in GPO response
             if (gpoSuccess) {
+                logger.Info("GPO command successful");
                 // === First try to parse Track2, PAN and other TLV fields directly from GPO response ===
+                logger.Debug("Parsing TLV data from GPO response...");
                 ParseTLV(RecvBuff, 0, (int)RecvLen - 2, 0, true);
 
                 // === Then parse AFL and read records ===
                 var aflList = ParseAFL(RecvBuff, RecvLen);
                 if (aflList.Count > 0) {
+                    logger.Info($"Found {aflList.Count} AFL entries");
                     // Read all records according to AFL
                     foreach (var (sfi, start, end) in aflList) {
+                        logger.Debug($"Reading SFI {sfi}, records {start} to {end}");
                         for (int rec = start; rec <= end; rec++) {
                             string cmd = $"00 B2 {rec:X2} {((sfi << 3) | 4):X2} 00";
                             SendLen = FillBufferFromHexString(cmd, SendBuff, 0);
                             RecvLen = 0xFF;
                             result = TransmitWithAutoFix();
                             if (result != 0 || RecvLen < 2 || !(RecvBuff[RecvLen - 2] == 0x90 && RecvBuff[RecvLen - 1] == 0x00)) {
+                                logger.Warning($"SFI {sfi} Record {rec} did not return 90 00");
                                 displayOut(0, 0, $"SFI {sfi} Record {rec} did not return 90 00, skipping parse");
                                 continue;
                             }
+                            logger.Debug($"Successfully read SFI {sfi} Record {rec}");
                             ParseRecordContent(RecvBuff, RecvLen - 2);
                         }
                     }
                 }
                 else {
+                    logger.Warning("Could not parse AFL, trying common records");
                     displayOut(0, 0, "Could not parse AFL, attempting to read SFI 1 Record 1");
                     // Try to read some common SFI and records
                     TryReadCommonRecords();
@@ -221,12 +254,16 @@ namespace EMVCard
             }
             else {
                 // If GPO fails, also try to read some common records
+                logger.Info("Attempting to read common records directly");
                 displayOut(0, 0, "Since GPO failed, attempting to read common records directly");
                 TryReadCommonRecords();
             }
 
             // Finally, regardless of whether previous steps succeeded, try to fill missing info from Track2
+            logger.Debug("Attempting to fill missing info from Track2...");
             FillMissingInfoFromTrack2();
+            
+            logger.Info("Application data reading completed");
         }
 
         // New method: Try to read common SFI and records
@@ -566,6 +603,7 @@ namespace EMVCard
         }
 
         private void bLoadPSE_Click(object sender, EventArgs e) {
+            logger.LogSeparator("Load PSE (Contact Mode)");
             cbPSE.Items.Clear();
             cbPSE.Text = "";
             textCardNum.Text = "";
@@ -575,17 +613,21 @@ namespace EMVCard
             labelToAID.Clear();
 
             // === 1. Select PSE Application (1PAY.SYS.DDF01) ===
+            logger.Debug("Selecting PSE application (1PAY.SYS.DDF01)...");
             string selectPSE = "00 A4 04 00 0E 31 50 41 59 2E 53 59 53 2E 44 44 46 30 31";
             int cmdLen = FillBufferFromHexString(selectPSE, SendBuff, 0);
             SendLen = cmdLen;
             RecvLen = 0xFF;
             int result = TransmitWithAutoFix(); // Auto-handle 61
             if (result != 0) {
+                logger.Error("Failed to select PSE application");
                 displayOut(0, 0, "Select PSE Application Failed");
                 return;
             }
+            logger.Info("PSE application selected successfully");
 
             // === 2. Read Record from SFI 1 one by one until 6A 83 is returned ===
+            logger.Debug("Reading PSE records...");
             for (int record = 1; ; record++) {
                 string readSFI = $"00 B2 {record:X2} 0C 00"; // SFI=1, P2=0C, Le=00
                 SendLen = FillBufferFromHexString(readSFI, SendBuff, 0);
@@ -595,16 +637,19 @@ namespace EMVCard
 
                 // Check if "Record not found"
                 if (RecvLen == 2 && RecvBuff[0] == 0x6A && RecvBuff[1] == 0x83) {
+                    logger.Debug($"Record {record} does not exist, ending PSE enumeration");
                     displayOut(0, 0, $"Record {record} does not exist, ending AID reading");
                     break;
                 }
 
                 // Check if successful
                 if (result != 0 || RecvLen < 2 || !(RecvBuff[RecvLen - 2] == 0x90 && RecvBuff[RecvLen - 1] == 0x00)) {
+                    logger.Warning($"Failed to read record {record}");
                     displayOut(0, 0, $"Record {record} read failed, stopping");
                     break;
                 }
 
+                logger.Debug($"Parsing PSE record {record}...");
                 displayOut(0, 0, $"Parsing AID information in Record {record}");
                 ParseSFIRecord(RecvBuff, RecvLen - 2); // Ignore trailing SW1 SW2
             }
@@ -612,6 +657,9 @@ namespace EMVCard
             // === Auto-select first application (if any) ===
             if (cbPSE.Items.Count > 0 && cbPSE.SelectedIndex == -1) {
                 cbPSE.SelectedIndex = 0;
+                logger.Info($"Found {cbPSE.Items.Count} application(s) in PSE");
+            } else {
+                logger.Warning("No applications found in PSE");
             }
         }
 
@@ -628,6 +676,7 @@ namespace EMVCard
 
 
         private void bLoadPPSE_Click(object sender, EventArgs e) {
+            logger.LogSeparator("Load PPSE (Contactless Mode)");
             cbPSE.Items.Clear();
             cbPSE.Text = "";
             textCardNum.Text = "";
@@ -637,18 +686,23 @@ namespace EMVCard
             labelToAID.Clear();
 
             // === 1. Select PPSE Application ===
+            logger.Debug("Selecting PPSE application (2PAY.SYS.DDF01)...");
             string selectPPSE = "00 A4 04 00 0E 32 50 41 59 2E 53 59 53 2E 44 44 46 30 31";
             int cmdLen = FillBufferFromHexString(selectPPSE, SendBuff, 0);
             SendLen = cmdLen;
             RecvLen = 0xFF;
             int result = TransmitWithAutoFix();
             if (result != 0 || RecvLen < 2 || !(RecvBuff[RecvLen - 2] == 0x90 && RecvBuff[RecvLen - 1] == 0x00)) {
+                logger.Error("Failed to select PPSE application");
                 displayOut(0, 0, "Select PPSE Application Failed");
                 return;
             }
+            logger.Info("PPSE application selected successfully");
 
             // === 2. Find all Application Templates (61) in returned FCI Template ===
+            logger.Debug("Parsing PPSE FCI template...");
             int index = 0;
+            int appCount = 0;
             while (index < RecvLen - 2) {
                 if (RecvBuff[index] == 0x61) {
                     int len = RecvBuff[index + 1];
@@ -675,12 +729,14 @@ namespace EMVCard
 
                         if (tag == 0x4F) {
                             currentAID = string.Join(" ", value.Select(b => b.ToString("X2")));
+                            logger.Debug($"Found AID: {currentAID}");
                             displayOut(0, 0, "AID: " + currentAID);
                         }
 
 
                         else if (tag == 0x50) {
                             label = Encoding.ASCII.GetString(value).Trim();
+                            logger.Debug($"Application Label: {label}");
                             displayOut(0, 0, "Application Label: " + label);
                         }
                     }
@@ -697,7 +753,7 @@ namespace EMVCard
                             cbPSE.Items.Add(itemName);
                             // Use itemName as key to store AID
                             labelToAID[itemName] = currentAID;
-
+                            appCount++;
                         }
                     }
 
@@ -711,6 +767,9 @@ namespace EMVCard
             // === Auto-select first one ===
             if (cbPSE.Items.Count > 0 && cbPSE.SelectedIndex == -1) {
                 cbPSE.SelectedIndex = 0;
+                logger.Info($"Found {appCount} application(s) in PPSE");
+            } else {
+                logger.Warning("No applications found in PPSE");
             }
         }
 
@@ -744,6 +803,7 @@ namespace EMVCard
                     int lenLen = (len & 0x7F);
 
                     if (lenLen <= 0 || lenLen > 3 || index + lenLen > buffer.Length) {
+                        logger.Warning($"TLV parsing error: abnormal length field (lenLen={lenLen}, index={index})");
                         displayOut(0, 0, $"TLV length field abnormal: lenLen={lenLen}, index={index}");
                         break;
                     }
@@ -756,6 +816,7 @@ namespace EMVCard
 
                 // Safety check
                 if (len < 0 || len > 4096 || index + len > buffer.Length) {
+                    logger.Warning($"TLV parsing error: illegal length (len={len}, index={index})");
                     displayOut(0, 0, $"TLV length illegal: len={len}, index={index}");
                     break;
                 }
@@ -773,6 +834,7 @@ namespace EMVCard
                             // Remove trailing F padding
                             pan = pan.TrimEnd('F');
                             textCardNum.Text = pan;
+                            logger.Info($"Found PAN (Card Number): {pan}");
                             displayOut(0, 0, $"Card Number (PAN): {pan}");
                         }
                         break;
@@ -791,6 +853,7 @@ namespace EMVCard
 
                             if (!string.IsNullOrEmpty(expiry)) {
                                 textEXP.Text = expiry;
+                                logger.Info($"Found Expiry Date: {expiry}");
                                 displayOut(0, 0, $"Expiry Date: {expiry}");
                             }
                         }
@@ -800,6 +863,7 @@ namespace EMVCard
                         if (priority > 0 || string.IsNullOrEmpty(textHolder.Text)) {
                             string name = Encoding.ASCII.GetString(value).Trim();
                             textHolder.Text = name;
+                            logger.Info($"Found Cardholder Name: {name}");
                             displayOut(0, 0, $"Cardholder Name: {name}");
                         }
                         break;
@@ -809,6 +873,7 @@ namespace EMVCard
                         if (storeTrack2) {
                             textTrack.Text = track2;
                             track2Data = track2;
+                            logger.Info($"Found Track2 Data: {track2}");
                             displayOut(0, 0, $"Track2 Data: {track2}");
                         }
                         break;
@@ -819,6 +884,7 @@ namespace EMVCard
                             if (storeTrack2) {
                                 textTrack.Text = track2Equiv;
                                 track2Data = track2Equiv;
+                                logger.Info($"Found Track2 Equivalent Data: {track2Equiv}");
                                 displayOut(0, 0, $"Track2 Equivalent Data: {track2Equiv}");
                             }
                         }
@@ -826,12 +892,14 @@ namespace EMVCard
 
                     case 0x70: // Record Template
                     case 0x77: // Response Message Template Format 2
+                        logger.Debug($"Parsing nested TLV template (tag: {tagValue:X})");
                         ParseTLV(value, 0, value.Length, priority, storeTrack2);
                         break;
 
                     case 0x80: // Response Message Template Format 1
                         if (len > 2) { // Ensure there is enough data
-                                       // Skip AIP (2 bytes)
+                            logger.Debug("Parsing Response Message Template Format 1");
+                            // Skip AIP (2 bytes)
                             ParseTLV(value, 2, value.Length, priority, storeTrack2);
                         }
                         break;
@@ -844,6 +912,7 @@ namespace EMVCard
 
 
         private void bConnect_Click(object sender, EventArgs e) {
+            logger.LogSeparator("Connect to Card");
             cbPSE.Items.Clear();
             cbPSE.Text = "";
             textCardNum.Text = "";
@@ -852,21 +921,30 @@ namespace EMVCard
             textTrack.Text = "";
 
             // Connect to selected reader using hContext handle and obtain hCard handle
-            if (connActive)
+            if (connActive) {
+                logger.Debug("Disconnecting previous card connection...");
                 retCode = ModWinsCard64.SCardDisconnect(hCard, ModWinsCard64.SCARD_UNPOWER_CARD);
+            }
 
             // Shared Connection
+            logger.Info($"Connecting to reader: {cbReader.Text}");
             retCode = ModWinsCard64.SCardConnect(hContext, cbReader.Text, ModWinsCard64.SCARD_SHARE_SHARED, ModWinsCard64.SCARD_PROTOCOL_T0 | ModWinsCard64.SCARD_PROTOCOL_T1, ref hCard, ref Protocol);
-            if (retCode == ModWinsCard64.SCARD_S_SUCCESS)
+            if (retCode == ModWinsCard64.SCARD_S_SUCCESS) {
+                logger.Info("Card connection established successfully");
                 displayOut(0, 0, "Successful connection to " + cbReader.Text);
+            }
             else {
+                logger.Error($"Failed to connect to card. Error code: {retCode:X}");
                 displayOut(1, retCode, "");
                 return;
             }
+            
             byte[] atr = new byte[33];
             long atrLen = atr.Length;
             int readerLen = 0;
             int state = 0;
+            
+            logger.Debug("Reading card ATR...");
             retCode = ModWinsCard64.SCardStatus(
                 hCard,
                 null,
@@ -879,17 +957,21 @@ namespace EMVCard
 
             if (retCode == ModWinsCard64.SCARD_S_SUCCESS) {
                 string atrStr = BitConverter.ToString(atr, 0, (int)atrLen);
+                logger.Info($"ATR: {atrStr}");
                 displayOut(0, 0, "ATR: " + atrStr);
 
                 // Simple check if contact card
                 if (atrLen > 0 && (atr[0] == 0x3B || atr[0] == 0x3F)) {
+                    logger.Info("Card operating in contact mode");
                     displayOut(0, 0, "Card default working in contact mode");
                 }
                 else {
+                    logger.Info("Card operating in contactless mode");
                     displayOut(0, 0, "Card default working in contactless mode");
                 }
             }
             else {
+                logger.Error($"Failed to read ATR. Error code: {retCode:X}");
                 displayOut(1, retCode, "Unable to read ATR");
             }
             connActive = true;
@@ -911,8 +993,11 @@ namespace EMVCard
         }
 
         private void bReset_Click(object sender, EventArgs e) {
-            if (connActive)
+            logger.LogSeparator("Reset Application");
+            if (connActive) {
+                logger.Debug("Disconnecting card...");
                 retCode = ModWinsCard64.SCardDisconnect(hCard, ModWinsCard64.SCARD_UNPOWER_CARD);
+            }
             cbReader.Items.Clear();
             cbReader.Text = "";
             bInit.Enabled = true;
@@ -923,13 +1008,18 @@ namespace EMVCard
             textEXP.Text = "";
             textHolder.Text = "";
             textTrack.Text = "";
+            logger.Debug("Releasing PC/SC context...");
             retCode = ModWinsCard64.SCardReleaseContext(hContext);
+            logger.Info("Application reset completed");
         }
 
         private void bQuit_Click(object sender, EventArgs e) {
+            logger.LogSeparator("Application Exit");
             // terminate the application
+            logger.Info("Shutting down application...");
             retCode = ModWinsCard64.SCardDisconnect(hCard, ModWinsCard64.SCARD_UNPOWER_CARD);
             retCode = ModWinsCard64.SCardReleaseContext(hContext);
+            logger.Close();
             System.Environment.Exit(0);
         }
 
@@ -1004,19 +1094,25 @@ namespace EMVCard
             if (startIndex < 0 || startIndex >= buffer.Length)
                 throw new ArgumentOutOfRangeException(nameof(startIndex), "Start position exceeds buffer range");
 
-            string[] hexValues = hexString.Split(' ', (char)StringSplitOptions.RemoveEmptyEntries);
-            int byteCount = hexValues.Length;
+            try {
+                string[] hexValues = hexString.Split(' ', (char)StringSplitOptions.RemoveEmptyEntries);
+                int byteCount = hexValues.Length;
 
-            if (startIndex + byteCount > buffer.Length)
-                throw new ArgumentException("Buffer is not large enough to contain all data");
+                if (startIndex + byteCount > buffer.Length)
+                    throw new ArgumentException("Buffer is not large enough to contain all data");
 
-            for (int i = 0; i < byteCount; i++) {
-                if (!byte.TryParse(hexValues[i], System.Globalization.NumberStyles.HexNumber, null, out byte result))
-                    throw new FormatException($"Unable to parse '{hexValues[i]}' as hexadecimal byte");
-                buffer[startIndex + i] = result;
+                for (int i = 0; i < byteCount; i++) {
+                    if (!byte.TryParse(hexValues[i], System.Globalization.NumberStyles.HexNumber, null, out byte result))
+                        throw new FormatException($"Unable to parse '{hexValues[i]}' as hexadecimal byte");
+                    buffer[startIndex + i] = result;
+                }
+
+                return byteCount;
             }
-
-            return byteCount;
+            catch (Exception ex) {
+                logger.Error($"Error parsing hex string: {hexString}", ex);
+                throw;
+            }
         }
 
         private void ParseRecordContent(byte[] buffer, long len) {
