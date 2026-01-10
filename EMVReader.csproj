@@ -108,6 +108,7 @@
     <Compile Include="EMVReader.Designer.cs">
       <DependentUpon>EMVReader.cs</DependentUpon>
     </Compile>
+    <Compile Include="Logger.cs" />
     <Compile Include="ModWinsCard64.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
