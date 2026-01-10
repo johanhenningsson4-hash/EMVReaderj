@@ -127,6 +127,7 @@
       <DesignTime>True</DesignTime>
     </Compile>
     <None Include="app.config" />
+    <None Include="GITHUB_RELEASE_GUIDE.md" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -136,6 +137,8 @@
       <DependentUpon>Settings.settings</DependentUpon>
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
+    <None Include="RELEASE_DESCRIPTION.md" />
+    <None Include="RELEASE_NOTES_v2.0.0.md" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="ACS_logo.ico" />
