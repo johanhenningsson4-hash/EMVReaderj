@@ -730,5 +730,394 @@ namespace EMVCard
 
             return byteCount;
         }
+
+        private void bClear_Click(object sender, EventArgs e) {
+            richTextBoxLogs.Clear();
+        }
+
+        private void bQuit_Click(object sender, EventArgs e) {
+            Logger.Info("Application shutting down");
+            // terminate the application
+            retCode = ModWinsCard64.SCardDisconnect(hCard, ModWinsCard64.SCARD_UNPOWER_CARD);
+            retCode = ModWinsCard64.SCardReleaseContext(hContext);
+            Logger.Info("Resources released. Application terminated");
+            System.Environment.Exit(0);
+        }
+
+        private bool SendGPOWithAutoPDOL(byte[] fciBuffer, long fciLen) {
+            int index = 0;
+            while (index < fciLen - 2) {
+                if (fciBuffer[index] == 0x9F && fciBuffer[index + 1] == 0x38) {
+                    index += 2;
+                    int len = fciBuffer[index++];
+                    byte[] pdolRaw = new byte[len];
+                    Array.Copy(fciBuffer, index, pdolRaw, 0, len);
+
+                    int pdolIndex = 0;
+                    List<byte> pdolData = new List<byte>();
+                    while (pdolIndex < pdolRaw.Length) {
+                        int tag = pdolRaw[pdolIndex++];
+                        if ((tag & 0x1F) == 0x1F) {
+                            tag = (tag << 8) | pdolRaw[pdolIndex++];
+                        }
+
+                        int tagLen = pdolRaw[pdolIndex++];
+
+                        // Fill various PDOL data
+                        switch (tag) {
+                            case 0x9F66: // TTQ
+                                pdolData.AddRange(new byte[] { 0x37, 0x00, 0x00, 0x00 });
+                                break;
+                            case 0x9F02: // Amount Authorized
+                                pdolData.AddRange(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 });
+                                break;
+                            case 0x9F03: // Amount Other (Cashback)
+                                pdolData.AddRange(new byte[tagLen]);
+                                break;
+                            case 0x9F1A: // Terminal Country Code (China: 0156)
+                            case 0x5F2A: // Transaction Currency Code (RMB: 0156)
+                                pdolData.AddRange(new byte[] { 0x01, 0x56 });
+                                break;
+                            case 0x9A: // Transaction Date (YYMMDD)
+                                var date = DateTime.Now;
+                                pdolData.AddRange(new byte[] {
+                            (byte)(date.Year % 100),
+                            (byte)(date.Month),
+                            (byte)(date.Day)
+                        });
+                                break;
+                            case 0x9C: // Transaction Type (default: Purchase)
+                                pdolData.Add(0x00);
+                                break;
+                            case 0x9F37: // Unpredictable Number
+                                var rnd = new Random();
+                                for (int i = 0; i < tagLen; i++) {
+                                    pdolData.Add((byte)rnd.Next(0, 256));
+                                }
+                                break;
+                            default:
+                                pdolData.AddRange(new byte[tagLen]); // Fill with 0
+                                break;
+                        }
+                    }
+
+                    int pdolDataLen = pdolData.Count;
+                    List<byte> gpo = new List<byte> {
+                0x80, 0xA8, 0x00, 0x00,
+                (byte)(pdolDataLen + 2), 0x83, (byte)pdolDataLen
+            };
+                    gpo.AddRange(pdolData);
+                    gpo.Add(0x00); // Le
+
+                    for (int i = 0; i < gpo.Count; i++)
+                        SendBuff[i] = gpo[i];
+                    SendLen = gpo.Count;
+                    RecvLen = 0xFF;
+                    int result = TransmitWithAutoFix();
+                    if (result != 0)
+                        return false;
+
+                    if (RecvBuff[0] == 0x80 || RecvBuff[0] == 0x77) {
+                        displayOut(0, 0, "GPO returned successfully (with PDOL)");
+                        return true;
+                    }
+                    else {
+                        displayOut(0, 0, "GPO return format abnormal");
+                        return false;
+                    }
+                }
+                else {
+                    index++;
+                }
+            }
+
+            // === No PDOL, send simplified GPO ===
+            string gpoEmpty = "80 A8 00 00 02 83 00 00";
+            SendLen = FillBufferFromHexString(gpoEmpty, SendBuff, 0);
+            RecvLen = 0xFF;
+            int res = TransmitWithAutoFix();
+            if (res != 0)
+                return false;
+
+            if (RecvBuff[0] == 0x80 || RecvBuff[0] == 0x77) {
+                displayOut(0, 0, "GPO returned successfully (simplified mode)");
+                return true;
+            }
+            else {
+                displayOut(0, 0, "Simplified GPO return format abnormal");
+                return false;
+            }
+        }
+
+        private List<(int sfi, int startRecord, int endRecord)> ParseAFL(byte[] buffer, long length) {
+            var aflList = new List<(int, int, int)>();
+
+            if (buffer[0] == 0x77)  // GPO return template 77
+            {
+                int i = 0;
+                while (i < length - 2) {
+                    if (buffer[i] == 0x94) {
+                        int len = buffer[i + 1];
+                        int pos = i + 2;
+                        while (pos + 3 < i + 2 + len) {
+                            int sfi = buffer[pos] >> 3;
+                            int start = buffer[pos + 1];
+                            int end = buffer[pos + 2];
+                            aflList.Add((sfi, start, end));
+                            pos += 4;
+                        }
+                        break;
+                    }
+                    i++;
+                }
+            }
+            else if (buffer[0] == 0x80)  // GPO return template 80 (Visa)
+            {
+                int totalLen = buffer[1];
+                if (totalLen + 2 > buffer.Length)
+                    return aflList;
+
+                int pos = 2;
+                pos += 2; // Skip AIP (2 bytes)
+
+                while (pos + 3 < 2 + totalLen) {
+                    int sfi = buffer[pos] >> 3;
+                    int start = buffer[pos + 1];
+                    int end = buffer[pos + 2];
+                    if (sfi >= 1 && sfi <= 31 && start >= 1 && end >= start) {
+                        aflList.Add((sfi, start, end));
+                    }
+                    pos += 4;
+                }
+            }
+
+            return aflList;
+        }
+
+        private string InsertSpaces(string hex) {
+            StringBuilder spaced = new StringBuilder();
+            for (int i = 0; i < hex.Length; i += 2) {
+                if (i > 0)
+                    spaced.Append(" ");
+                spaced.Append(hex.Substring(i, 2));
+            }
+            return spaced.ToString();
+        }
+
+        public void ParseSFIRecord(byte[] buffer, long length) {
+            string currentAID = "";
+            int index = 0;
+            
+            while (index < length) {
+                byte tag = buffer[index++];
+                byte? tag2 = null;
+
+                // Handle two-byte Tag (e.g., 9F 12)
+                if ((tag & 0x1F) == 0x1F) {
+                    tag2 = buffer[index++];
+                }
+
+                int tagValue = tag2.HasValue ? (tag << 8 | tag2.Value) : tag;
+
+                // Get length
+                int len = buffer[index++];
+                if (len > 0x80) {
+                    int lenLen = len & 0x7F;
+                    len = 0;
+                    for (int i = 0; i < lenLen; i++)
+                        len = (len << 8) + buffer[index++];
+                }
+
+                // Get Value
+                byte[] value = new byte[len];
+                Array.Copy(buffer, index, value, 0, len);
+                index += len;
+
+                // Parse and print common fields
+                switch (tagValue) {
+                    case 0x4F: // AID
+                        currentAID = string.Join(" ", value.Select(b => b.ToString("X2")));
+                        displayOut(0, 0, "AID: " + currentAID);
+                        break;
+                    case 0x50: // Application Label
+                        string label = Encoding.ASCII.GetString(value);
+                        displayOut(0, 0, "Application Label: " + label);
+                        if (!cbPSE.Items.Contains(label)) {
+                            cbPSE.Items.Add(label);
+                            if (!labelToAID.ContainsKey(label) && !string.IsNullOrEmpty(currentAID)) {
+                                labelToAID[label] = currentAID;
+                            }
+                        }
+                        break;
+                    case 0x9F12: // Preferred Name
+                        displayOut(0, 0, "Preferred Name: " + Encoding.ASCII.GetString(value));
+                        break;
+                    case 0x87: // Priority
+                        displayOut(0, 0, "Application Priority: " + value[0]);
+                        break;
+                    case 0x61: // Application Template, recursively parse
+                    case 0x70: // FCI template
+                        displayOut(0, 0, $"Template tag {tagValue:X}, parsing inner TLVs...");
+                        ParseSFIRecord(value, len);
+                        break;
+                    default:
+                        // Other fields can be added as needed
+                        break;
+                }
+            }
+        }
+
+        private void ParseRecordContent(byte[] buffer, long len) {
+            // Check if template format (starts with 70)
+            if (buffer[0] == 0x70) {
+                int templateLen = buffer[1];
+                int startPos = 2;
+
+                // Handle long format length
+                if (buffer[1] > 0x80) {
+                    int lenBytes = buffer[1] & 0x7F;
+                    templateLen = 0;
+                    for (int i = 0; i < lenBytes; i++) {
+                        templateLen = (templateLen << 8) | buffer[2 + i];
+                    }
+                    startPos = 2 + lenBytes;
+                }
+
+                // Parse record file with high priority (1)
+                ParseTLV(buffer, 0, (int)len, 1, true);
+            }
+            else {
+                // Directly parse TLV data with high priority
+                ParseTLV(buffer, 0, (int)len, 1, true);
+            }
+        }
+
+        private string ParseTLV(byte[] buffer, int startIndex, int endIndex, int priority = 0, bool storeTrack2 = true) {
+            string track2Data = null;
+            int index = startIndex;
+
+            while (index < endIndex) {
+                if (index >= buffer.Length)
+                    break;
+
+                // Parse Tag
+                byte tag = buffer[index++];
+                byte? tag2 = null;
+
+                if ((tag & 0x1F) == 0x1F) {
+                    if (index >= buffer.Length)
+                        break;
+                    tag2 = buffer[index++];
+                }
+
+                int tagValue = tag2.HasValue ? (tag << 8 | tag2.Value) : tag;
+
+                // Parse Length
+                if (index >= buffer.Length)
+                    break;
+
+                int len = buffer[index++];
+                if (len >= 0x80) {
+                    int lenLen = (len & 0x7F);
+
+                    if (lenLen <= 0 || lenLen > 3 || index + lenLen > buffer.Length) {
+                        displayOut(0, 0, $"TLV length field abnormal: lenLen={lenLen}, index={index}");
+                        break;
+                    }
+
+                    len = 0;
+                    for (int i = 0; i < lenLen; i++) {
+                        len = (len << 8) + buffer[index++];
+                    }
+                }
+
+                // Safety check
+                if (len < 0 || len > 4096 || index + len > buffer.Length) {
+                    displayOut(0, 0, $"TLV length illegal: len={len}, index={index}");
+                    break;
+                }
+
+                // Extract Value
+                byte[] value = new byte[len];
+                Array.Copy(buffer, index, value, 0, len);
+                index += len;
+
+                // Process data based on Tag
+                switch (tagValue) {
+                    case 0x5A: // PAN (Card Number)
+                        if (priority > 0 || string.IsNullOrEmpty(textCardNum.Text)) {
+                            string pan = BitConverter.ToString(value).Replace("-", "");
+                            // Remove trailing F padding
+                            pan = pan.TrimEnd('F');
+                            textCardNum.Text = pan;
+                            displayOut(0, 0, $"Card Number (PAN): {pan}");
+                        }
+                        break;
+
+                    case 0x5F24: // Expiry Date
+                        if (priority > 0 || string.IsNullOrEmpty(textEXP.Text)) {
+                            string rawDate = BitConverter.ToString(value).Replace("-", "");
+                            string expiry = "";
+
+                            if (rawDate.Length >= 6) {
+                                expiry = $"20{rawDate.Substring(0, 2)}-{rawDate.Substring(2, 2)}-{rawDate.Substring(4, 2)}";
+                            }
+                            else if (rawDate.Length >= 4) {
+                                expiry = $"20{rawDate.Substring(0, 2)}-{rawDate.Substring(2, 2)}";
+                            }
+
+                            if (!string.IsNullOrEmpty(expiry)) {
+                                textEXP.Text = expiry;
+                                displayOut(0, 0, $"Expiry Date: {expiry}");
+                            }
+                        }
+                        break;
+
+                    case 0x5F20: // Cardholder Name
+                        if (priority > 0 || string.IsNullOrEmpty(textHolder.Text)) {
+                            string name = Encoding.ASCII.GetString(value).Trim();
+                            textHolder.Text = name;
+                            displayOut(0, 0, $"Cardholder Name: {name}");
+                        }
+                        break;
+
+                    case 0x57: // Track2 Data
+                        string track2 = BitConverter.ToString(value).Replace("-", "");
+                        if (storeTrack2) {
+                            textTrack.Text = track2;
+                            track2Data = track2;
+                            displayOut(0, 0, $"Track2 Data: {track2}");
+                        }
+                        break;
+
+                    case 0x9F6B: // Track2 Equivalent Data
+                        if (string.IsNullOrEmpty(textTrack.Text)) {
+                            string track2Equiv = BitConverter.ToString(value).Replace("-", "");
+                            if (storeTrack2) {
+                                textTrack.Text = track2Equiv;
+                                track2Data = track2Equiv;
+                                displayOut(0, 0, $"Track2 Equivalent Data: {track2Equiv}");
+                            }
+                        }
+                        break;
+
+                    case 0x70: // Record Template
+                    case 0x77: // Response Message Template Format 2
+                        ParseTLV(value, 0, value.Length, priority, storeTrack2);
+                        break;
+
+                    case 0x80: // Response Message Template Format 1
+                        if (len > 2) { // Ensure sufficient data
+                                       // Skip AIP (2 bytes)
+                            ParseTLV(value, 2, value.Length, priority, storeTrack2);
+                        }
+                        break;
+                }
+            }
+
+            return track2Data;
+        }
+
     }
+
 }
