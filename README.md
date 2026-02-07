@@ -1,5 +1,10 @@
 # EMV Card Reader
 
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/johanhenningsson4-hash/EMVReaderj/releases/tag/v2.0.0)
+[![.NET](https://img.shields.io/badge/.NET%20Framework-4.7.2-purple.svg)](https://dotnet.microsoft.com/download/dotnet-framework/net472)
+[![License](https://img.shields.io/badge/license-ACS%20Ltd-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-55%2B%20passing-brightgreen.svg)](EMVCard.Tests/)
+
 A Windows application for reading and analyzing EMV (Europay, Mastercard, and Visa) chip cards using PC/SC-compatible smart card readers.
 
 ## Overview

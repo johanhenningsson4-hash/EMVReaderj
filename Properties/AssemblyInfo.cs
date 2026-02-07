@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("EMVReader")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("EMV Card Reader")]
+[assembly: AssemblyDescription("Professional EMV card reader with comprehensive logging, performance optimizations, and testing framework")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("ChainRuiLanke")]
-[assembly: AssemblyProduct("EMVReader")]
-[assembly: AssemblyCopyright("Copyright © TUTU 2025")]
+[assembly: AssemblyCompany("Advanced Card Systems Ltd")]
+[assembly: AssemblyProduct("EMV Card Reader")]
+[assembly: AssemblyCopyright("Copyright © Advanced Card Systems Ltd 2025")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -29,5 +29,5 @@ using System.Runtime.InteropServices;
 //      Build Number
 //      Revision
 //
-[assembly: AssemblyVersion("1.0.6.0")]
-[assembly: AssemblyFileVersion("1.0.6.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyFileVersion("2.0.0.0")]
