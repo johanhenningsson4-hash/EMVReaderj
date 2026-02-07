@@ -102,6 +102,16 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BufferPool.cs" />
+    <Compile Include="Configuration.cs" />
+    <Compile Include="EMVCard.Tests\IntegrationTests\CardReaderIntegrationTests.cs" />
+    <Compile Include="EMVCard.Tests\Properties\AssemblyInfo.cs" />
+    <Compile Include="EMVCard.Tests\TestUtilities\MockObjects.cs" />
+    <Compile Include="EMVCard.Tests\TestUtilities\TestData.cs" />
+    <Compile Include="EMVCard.Tests\UnitTests\BufferPoolTests.cs" />
+    <Compile Include="EMVCard.Tests\UnitTests\ConfigurationTests.cs" />
+    <Compile Include="EMVCard.Tests\UnitTests\LoggerTests.cs" />
+    <Compile Include="EMVCard.Tests\UnitTests\TLVParsingTests.cs" />
     <Compile Include="EMVReader.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -127,6 +137,9 @@
       <DesignTime>True</DesignTime>
     </Compile>
     <None Include="app.config" />
+    <None Include="EMVCard.Tests\EMVCard.Tests.csproj" />
+    <None Include="EMVCard.Tests\packages.config" />
+    <None Include="EMVCard.Tests\README_TESTING.md" />
     <None Include="GITHUB_RELEASE_GUIDE.md" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -139,6 +152,9 @@
     </Compile>
     <None Include="RELEASE_DESCRIPTION.md" />
     <None Include="RELEASE_NOTES_v2.0.0.md" />
+    <None Include="TESTING_IMPLEMENTATION_SUMMARY.md" />
+    <None Include="V2.0.0_RELEASE_COMPLETE.md" />
+    <None Include="VERSION.md" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="ACS_logo.ico" />

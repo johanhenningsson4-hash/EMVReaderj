@@ -101,16 +101,7 @@ namespace EMVCard.Tests.UnitTests
         public void BufferPool_ReturnNull_DoesNotThrow()
         {
             // Act & Assert
-            try
-            {
-                BufferPool.Return(null);
-                // If we reach here, no exception was thrown - test passes
-                Assert.IsTrue(true);
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"Expected no exception, but got: {ex.GetType().Name}: {ex.Message}");
-            }
+            Assert.DoesNotThrow(() => BufferPool.Return(null));
         }
 
         [TestMethod]
@@ -254,15 +245,7 @@ namespace EMVCard.Tests.UnitTests
             var customBuffer = new byte[1000]; // Not 512 or 4096
 
             // Act & Assert - Should not throw
-            try
-            {
-                BufferPool.Return(customBuffer);
-                Assert.IsTrue(true); // Test passes if no exception
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"Expected no exception, but got: {ex.GetType().Name}: {ex.Message}");
-            }
+            Assert.DoesNotThrow(() => BufferPool.Return(customBuffer));
             
             // Buffer should not be pooled (stats should not change)
             var statsBefore = BufferPool.GetPoolStats();
@@ -276,7 +259,7 @@ namespace EMVCard.Tests.UnitTests
         /// <summary>
         /// Helper method that doesn't throw exceptions (for .NET Framework 4.7.2 compatibility)
         /// </summary>
-        private void AssertDoesNotThrow(Action action)
+        private void Assert.DoesNotThrow(Action action)
         {
             try
             {

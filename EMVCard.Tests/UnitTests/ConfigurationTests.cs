@@ -209,15 +209,8 @@ namespace EMVCard.Tests.UnitTests
             {
                 // In the actual implementation, these should not throw exceptions
                 // and should fall back to default values
-                try
-                {
-                    ParseConfigValue(key, value);
-                    Assert.IsTrue(true); // Test passes if no exception
-                }
-                catch (Exception ex)
-                {
-                    Assert.Fail($"Parsing {key}={value} should not throw an exception, but got: {ex.GetType().Name}: {ex.Message}");
-                }
+                Assert.DoesNotThrow(() => ParseConfigValue(key, value),
+                    $"Parsing {key}={value} should not throw an exception");
             }
         }
 
@@ -233,25 +226,8 @@ namespace EMVCard.Tests.UnitTests
             // - Insufficient permissions
             
             // For now, just verify that the methods exist and can be called
-            try
-            {
-                AppConfiguration.Save();
-                Assert.IsTrue(true);
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"Save() should not throw exception: {ex.Message}");
-            }
-
-            try
-            {
-                AppConfiguration.Load();
-                Assert.IsTrue(true);
-            }
-            catch (Exception ex)
-            {
-                Assert.Fail($"Load() should not throw exception: {ex.Message}");
-            }
+            Assert.DoesNotThrow(() => AppConfiguration.Save());
+            Assert.DoesNotThrow(() => AppConfiguration.Load());
         }
 
         #region Helper Methods
@@ -285,7 +261,7 @@ namespace EMVCard.Tests.UnitTests
         /// <summary>
         /// Helper method for .NET Framework compatibility
         /// </summary>
-        private void AssertDoesNotThrow(Action action, string message = null)
+        private void Assert.DoesNotThrow(Action action, string message = null)
         {
             try
             {

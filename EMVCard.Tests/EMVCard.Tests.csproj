@@ -53,9 +53,12 @@
     <Compile Include="UnitTests\BufferPoolTests.cs" />
     <Compile Include="UnitTests\ConfigurationTests.cs" />
     <Compile Include="UnitTests\TLVParsingTests.cs" />
+    <Compile Include="UnitTests\Track2ParsingTests.cs" />
     <Compile Include="IntegrationTests\CardReaderIntegrationTests.cs" />
+    <Compile Include="MockTests\MockCardReaderTests.cs" />
     <Compile Include="TestUtilities\MockObjects.cs" />
     <Compile Include="TestUtilities\TestData.cs" />
+    <Compile Include="TestUtilities\TestHelpers.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -74,6 +77,7 @@
     <Folder Include="TestUtilities\" />
     <Folder Include="UnitTests\" />
     <Folder Include="IntegrationTests\" />
+    <Folder Include="MockTests\" />
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
