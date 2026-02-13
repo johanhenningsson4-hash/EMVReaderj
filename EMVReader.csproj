@@ -106,9 +106,7 @@
     <Compile Include="Configuration.cs" />
     <Compile Include="EMVCardReader.cs" />
     <Compile Include="EMVReader.Designer.cs" />
-    <Compile Include="EMVReader_Refactored.cs">
-      <SubType>Form</SubType>
-    </Compile>
+    <Compile Include="EMVReader_Refactored.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="ModWinsCard64.cs" />
     <Compile Include="Program.cs" />
@@ -125,6 +123,7 @@
     </Compile>
     <None Include="app.config" />
     <None Include="BUILD_FIX_GUIDE.md" />
+    <None Include="FINAL_BUILD_FIX.md" />
     <None Include="Fix-BuildErrors.ps1" />
     <None Include="GITHUB_RELEASE_GUIDE.md" />
     <None Include="Properties\Settings.settings">
