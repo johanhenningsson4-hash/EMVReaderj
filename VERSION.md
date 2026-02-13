@@ -1,16 +1,26 @@
 # EMV Card Reader - Version Information
 
-## Current Version: 2.0.0
+## Current Version: 2.1.0
 
 **Release Date**: January 2025
 **Build Date**: $(date)
 
 ### Version History
+- **v2.1.0** - Refactored architecture with separated business logic
 - **v2.0.0** - Major release with logging, translations, optimizations, and testing
 - **v1.0.6** - Previous release
 - **v1.0.5** - Rewrite decode and parse code
 - **v1.0.4** - Fixed AID conflict
 - **v1.0.0** - Initial release (2008)
+
+### Version 2.1.0 Features (NEW)
+? **Separation of Concerns** - UI logic separated from business logic
+? **EMVCardReader Class** - Dedicated class for EMV operations  
+? **Event-Driven Architecture** - Clean communication between layers
+? **Improved Testability** - Business logic can be unit tested independently
+? **Better Error Handling** - Centralized error management
+? **Thread-Safe Operations** - Proper UI thread synchronization
+? **Cleaner Code Structure** - Follows SOLID principles
 
 ### Version 2.0.0 Features
 ? **Comprehensive Logging System** - File-based logging with automatic rotation
