@@ -1,0 +1,1 @@
+using System; using Microsoft.VisualStudio.TestTools.UnitTesting; namespace EMVCard.Tests.TestUtilities { public static class TestHelpers { public static bool IsValidPAN(string pan) { return !string.IsNullOrEmpty(pan) && pan.Length >= 13; } } }

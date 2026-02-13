@@ -1,0 +1,1 @@
+using System; using Microsoft.VisualStudio.TestTools.UnitTesting; namespace EMVCard.Tests.MockTests { [TestClass] public class MockCardReaderTests { [TestMethod] public void MockTest() { Assert.IsTrue(true); } } }

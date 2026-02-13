@@ -1,0 +1,1 @@
+using System; using Microsoft.VisualStudio.TestTools.UnitTesting; namespace EMVCard.Tests.UnitTests { [TestClass] public class Track2ParsingTests { [TestMethod] public void Track2Test() { Assert.IsTrue(true); } } }
