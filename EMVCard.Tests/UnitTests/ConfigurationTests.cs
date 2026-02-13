@@ -5,6 +5,7 @@
 '==========================================================================================*/
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using EMVCard;
@@ -209,7 +210,7 @@ namespace EMVCard.Tests.UnitTests
             {
                 // In the actual implementation, these should not throw exceptions
                 // and should fall back to default values
-                Assert.DoesNotThrow(() => ParseConfigValue(key, value),
+                AssertDoesNotThrow(() => ParseConfigValue(key, value),
                     $"Parsing {key}={value} should not throw an exception");
             }
         }
@@ -226,8 +227,8 @@ namespace EMVCard.Tests.UnitTests
             // - Insufficient permissions
             
             // For now, just verify that the methods exist and can be called
-            Assert.DoesNotThrow(() => AppConfiguration.Save());
-            Assert.DoesNotThrow(() => AppConfiguration.Load());
+            AssertDoesNotThrow(() => AppConfiguration.Save());
+            AssertDoesNotThrow(() => AppConfiguration.Load());
         }
 
         #region Helper Methods
@@ -261,7 +262,7 @@ namespace EMVCard.Tests.UnitTests
         /// <summary>
         /// Helper method for .NET Framework compatibility
         /// </summary>
-        private void Assert.DoesNotThrow(Action action, string message = null)
+        private void AssertDoesNotThrow(Action action, string message = null)
         {
             try
             {

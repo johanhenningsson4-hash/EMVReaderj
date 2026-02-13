@@ -106,9 +106,7 @@
     <Compile Include="Configuration.cs" />
     <Compile Include="EMVCardReader.cs" />
     <Compile Include="EMVReader.Designer.cs" />
-    <Compile Include="EMVReader.cs">
-      <SubType>Form</SubType>
-    </Compile>
+    <Compile Include="EMVReader_Refactored.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="ModWinsCard64.cs" />
     <Compile Include="Program.cs" />
