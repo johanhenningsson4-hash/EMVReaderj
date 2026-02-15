@@ -108,24 +108,23 @@ Add these badges to your README.md:
 - **Dependency Updates** - Weekly automated issues
 - **Successful Releases** - Optional team notifications
 
-## 🛠️ Troubleshooting
+### Known Issues and Solutions
 
-### Common Issues
+**VSTest Runner Not Found:**
+The workflow automatically installs Microsoft.TestPlatform via NuGet to provide `vstest.console.exe`. If this fails:
+- Tests will be skipped with a warning
+- Build validation still occurs
+- Run tests locally before pushing
 
-**Build Failures:**
-- Check .NET Framework 4.7.2 compatibility
-- Verify NuGet package restoration
-- Review MSBuild output logs
+**MSBuild Issues:**
+- Ensure .NET Framework 4.7.2 is supported
+- Check NuGet package restoration
+- Verify project file compatibility
 
-**Test Failures:**
-- Check test assembly detection
-- Verify VSTest runner availability
-- Review test result outputs
-
-**Release Issues:**
-- Confirm version format in AssemblyInfo.cs
-- Check commit message contains "Bump version"
-- Verify GITHUB_TOKEN permissions
+**Test Assembly Detection:**
+- Tests must be in assemblies named `*.Tests.dll`
+- Must be in the correct build configuration directory
+- Check project references and build output
 
 ### Debugging Steps
 1. Check workflow logs in Actions tab
