@@ -71,7 +71,7 @@ jobs:
           Write-Host "VSTest not available - tests will be validated during build only"
 
           # Create a simple test result to show tests were found but not executed
-          @"
+          $testResultContent = @'
 <?xml version="1.0" encoding="UTF-8"?>
 <TestRun id="00000000-0000-0000-0000-000000000000" name="PR Validation - Build Only" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
   <TestSettings name="default" id="00000000-0000-0000-0000-000000000000">
@@ -91,7 +91,8 @@ jobs:
     </UnitTest>
   </TestDefinitions>
 </TestRun>
-"@ | Out-File -FilePath "TestResults\BuildValidation.trx" -Encoding UTF8
+'@
+          $testResultContent | Out-File -FilePath "TestResults\BuildValidation.trx" -Encoding UTF8
         }
       continue-on-error: true
     

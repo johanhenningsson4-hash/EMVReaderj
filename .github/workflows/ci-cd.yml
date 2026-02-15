@@ -113,7 +113,7 @@ jobs:
             Write-Host "Tests should be run locally before pushing to ensure they pass."
 
             # Create empty test results file to prevent workflow failure
-            @"
+            $testResultContent = @'
 <?xml version="1.0" encoding="UTF-8"?>
 <TestRun id="00000000-0000-0000-0000-000000000000" name="Skipped Test Run" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
   <TestSettings name="default" id="00000000-0000-0000-0000-000000000000">
@@ -133,7 +133,8 @@ jobs:
     </UnitTest>
   </TestDefinitions>
 </TestRun>
-"@ | Out-File -FilePath "TestResults\TestResults.trx" -Encoding UTF8
+'@
+            $testResultContent | Out-File -FilePath "TestResults\TestResults.trx" -Encoding UTF8
           }
         }
       continue-on-error: true
