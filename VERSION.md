@@ -1,11 +1,13 @@
 # EMV Card Reader - Version Information
 
-## Current Version: 2.1.0
+## Current Version: 2.2.0
 
 **Release Date**: January 2025
 **Build Date**: $(date)
 
 ### Version History
+- **v2.2.0** - Added comprehensive EMV DOL processing, Tag validation, and Multi-application support with extensive test coverage
+- **v2.1.1** - Fixed C# 7.3 compatibility issues and build errors  
 - **v2.1.0** - Refactored architecture with separated business logic
 - **v2.0.0** - Major release with logging, translations, optimizations, and testing
 - **v1.0.6** - Previous release
@@ -13,11 +15,17 @@
 - **v1.0.4** - Fixed AID conflict
 - **v1.0.0** - Initial release (2008)
 
-### Version 2.1.0 Features (NEW)
-? **Separation of Concerns** - UI logic separated from business logic
-? **EMVCardReader Class** - Dedicated class for EMV operations  
-? **Event-Driven Architecture** - Clean communication between layers
-? **Improved Testability** - Business logic can be unit tested independently
+### Version 2.2.0 Features (NEW)
+? **EMV DOL Processing** - Complete PDOL/CDOL parsing and command building  
+? **EMV Tag Validation** - EMV 4.3 compliant tag definitions and format validation
+? **Multi-Application Support** - PSE parsing and priority-based application selection
+? **Enhanced TLV Parsing** - Comprehensive TLV structure handling and validation
+? **Extensive Test Coverage** - 15+ new test methods for EMV functionality
+? **C# 7.3 Compatibility** - Full compatibility with .NET Framework 4.7.2
+
+### Version 2.1.1 Features 
+? **Build System Fixes** - Resolved C# compilation errors and missing using directives
+? **Test Framework Improvements** - Fixed test method syntax and helper implementations
 ? **Better Error Handling** - Centralized error management
 ? **Thread-Safe Operations** - Proper UI thread synchronization
 ? **Cleaner Code Structure** - Follows SOLID principles

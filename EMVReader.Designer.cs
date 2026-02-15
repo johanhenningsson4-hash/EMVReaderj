@@ -204,7 +204,7 @@ namespace EMVCard
             this.Controls.Add(this.textCardNum);
             this.Controls.Add(this.richTextBoxLogs);
             this.Name = "MainEMVReaderBin";
-            this.Text = "EMV Card Reader v2.1.0";
+            this.Text = "EMV Card Reader v2.2.0";
             this.ResumeLayout(false);
             this.PerformLayout();
         }
