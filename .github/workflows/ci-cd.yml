@@ -1,0 +1,261 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  SOLUTION_FILE: EMVReader.sln
+  BUILD_CONFIGURATION: Release
+  DOTNET_FRAMEWORK_VERSION: 4.7.2
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for versioning
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      with:
+        msbuild-architecture: x64
+    
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
+      with:
+        nuget-version: 'latest'
+    
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.config') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+    
+    - name: Restore NuGet Packages
+      run: nuget restore ${{ env.SOLUTION_FILE }}
+    
+    - name: Build Solution
+      run: |
+        msbuild ${{ env.SOLUTION_FILE }} `
+          -p:Configuration=${{ env.BUILD_CONFIGURATION }} `
+          -p:Platform="Any CPU" `
+          -p:TargetFrameworkVersion=v${{ env.DOTNET_FRAMEWORK_VERSION }} `
+          -m `
+          -verbosity:minimal
+    
+    - name: Run Unit Tests
+      run: |
+        $testDlls = Get-ChildItem -Path "." -Recurse -Include "*.Tests.dll" | Where-Object { $_.Directory.Name -eq "${{ env.BUILD_CONFIGURATION }}" }
+        if ($testDlls.Count -gt 0) {
+          vstest.console.exe $testDlls.FullName --logger:trx --resultsDirectory:TestResults
+        } else {
+          Write-Host "No test assemblies found"
+        }
+      continue-on-error: false
+    
+    - name: Publish Test Results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Test Results
+        path: TestResults/*.trx
+        reporter: dotnet-trx
+        fail-on-error: true
+    
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: EMV-Reader-${{ github.sha }}
+        path: |
+          bin/${{ env.BUILD_CONFIGURATION }}/*.exe
+          bin/${{ env.BUILD_CONFIGURATION }}/*.dll
+          bin/${{ env.BUILD_CONFIGURATION }}/*.pdb
+        retention-days: 30
+    
+    - name: Code Quality Analysis
+      if: github.event_name == 'pull_request'
+      run: |
+        Write-Host "Code quality analysis placeholder"
+        Write-Host "Consider adding SonarQube or CodeQL analysis here"
+
+  security-scan:
+    name: Security Scan
+    runs-on: windows-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Run CodeQL Analysis
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+        queries: security-extended,security-and-quality
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
+    
+    - name: Restore and Build for Analysis
+      run: |
+        nuget restore ${{ env.SOLUTION_FILE }}
+        msbuild ${{ env.SOLUTION_FILE }} -p:Configuration=${{ env.BUILD_CONFIGURATION }}
+    
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+  create-release:
+    name: Create Release
+    runs-on: windows-latest
+    needs: [build-and-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, 'Bump version')
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Extract Version
+      id: extract-version
+      run: |
+        $assemblyInfo = Get-Content "Properties\AssemblyInfo.cs"
+        $versionLine = $assemblyInfo | Select-String 'AssemblyVersion\("([^"]+)"\)'
+        $version = $versionLine.Matches[0].Groups[1].Value
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "TAG=v$version" >> $env:GITHUB_OUTPUT
+        echo "Extracted version: $version"
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
+    
+    - name: Build Release
+      run: |
+        nuget restore ${{ env.SOLUTION_FILE }}
+        msbuild ${{ env.SOLUTION_FILE }} `
+          -p:Configuration=${{ env.BUILD_CONFIGURATION }} `
+          -p:Platform="Any CPU" `
+          -p:OutputPath="bin\Release\" `
+          -m
+    
+    - name: Create Release Archive
+      run: |
+        $releaseDir = "EMVReader-v${{ steps.extract-version.outputs.VERSION }}"
+        New-Item -ItemType Directory -Path $releaseDir -Force
+        
+        # Copy main executable and dependencies
+        Copy-Item "bin\${{ env.BUILD_CONFIGURATION }}\EMVReader.exe" $releaseDir
+        Copy-Item "bin\${{ env.BUILD_CONFIGURATION }}\*.dll" $releaseDir -ErrorAction SilentlyContinue
+        Copy-Item "ACS_logo.ico" $releaseDir -ErrorAction SilentlyContinue
+        
+        # Copy documentation
+        Copy-Item "README.md" $releaseDir -ErrorAction SilentlyContinue
+        Copy-Item "VERSION.md" $releaseDir -ErrorAction SilentlyContinue
+        
+        # Create ZIP archive
+        Compress-Archive -Path "$releaseDir\*" -DestinationPath "$releaseDir.zip"
+        echo "RELEASE_FILE=$releaseDir.zip" >> $env:GITHUB_OUTPUT
+      id: create-archive
+    
+    - name: Generate Release Notes
+      id: release-notes
+      run: |
+        $versionContent = Get-Content "VERSION.md" -Raw
+        
+        # Extract features for current version
+        $currentVersionMatch = $versionContent | Select-String -Pattern "### Version \d+\.\d+\.\d+ Features.*?(?=### Version|\z)" -AllMatches
+        $features = if ($currentVersionMatch.Matches.Count -gt 0) { 
+          $currentVersionMatch.Matches[0].Value 
+        } else { 
+          "See VERSION.md for detailed changelog" 
+        }
+        
+        $releaseNotes = @"
+        # EMV Card Reader v${{ steps.extract-version.outputs.VERSION }}
+        
+        ## 🚀 What's New
+        $features
+        
+        ## 📦 Installation
+        1. Download the ZIP file below
+        2. Extract to your desired location
+        3. Run EMVReader.exe
+        
+        ## 🔧 Requirements
+        - Windows 10/11 (x64)
+        - .NET Framework 4.7.2 or later
+        - Smart card reader hardware
+        
+        ## 📋 Files Included
+        - EMVReader.exe - Main application
+        - Required DLLs and dependencies
+        - Documentation (README.md, VERSION.md)
+        
+        ---
+        **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ steps.extract-version.outputs.TAG }}...v${{ steps.extract-version.outputs.VERSION }}
+        "@
+        
+        $releaseNotes | Out-File -FilePath "release-notes.md" -Encoding UTF8
+        echo "RELEASE_NOTES_FILE=release-notes.md" >> $env:GITHUB_OUTPUT
+    
+    - name: Create Git Tag
+      run: |
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git tag -a "${{ steps.extract-version.outputs.TAG }}" -m "Release version ${{ steps.extract-version.outputs.VERSION }}"
+        git push origin "${{ steps.extract-version.outputs.TAG }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.extract-version.outputs.TAG }}
+        name: EMV Card Reader ${{ steps.extract-version.outputs.TAG }}
+        body_path: ${{ steps.release-notes.outputs.RELEASE_NOTES_FILE }}
+        files: ${{ steps.create-archive.outputs.RELEASE_FILE }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-teams:
+    name: Notify Teams
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: always() && needs.create-release.result == 'success'
+    
+    steps:
+    - name: Notify Success
+      run: |
+        echo "🎉 EMV Card Reader v${{ needs.create-release.outputs.VERSION }} released successfully!"
+        echo "📦 Release available at: https://github.com/${{ github.repository }}/releases/latest"
+        # Add Slack/Teams webhook notification here if needed
+
+  cleanup:
+    name: Cleanup Old Artifacts
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Delete Old Artifacts
+      uses: c-hive/gha-remove-artifacts@v1
+      with:
+        age: '30 days'
+        skip-recent: 5

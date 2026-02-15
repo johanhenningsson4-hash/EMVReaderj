@@ -1,0 +1,121 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened ]
+
+env:
+  SOLUTION_FILE: EMVReader.sln
+  BUILD_CONFIGURATION: Debug
+
+jobs:
+  validate-pr:
+    name: Validate Pull Request
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout PR
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
+    
+    - name: Restore NuGet Packages
+      run: nuget restore ${{ env.SOLUTION_FILE }}
+    
+    - name: Build Solution (Debug)
+      run: |
+        msbuild ${{ env.SOLUTION_FILE }} `
+          -p:Configuration=${{ env.BUILD_CONFIGURATION }} `
+          -p:Platform="Any CPU" `
+          -p:TreatWarningsAsErrors=false `
+          -m `
+          -verbosity:normal
+    
+    - name: Run Tests
+      run: |
+        $testDlls = Get-ChildItem -Path "." -Recurse -Include "*.Tests.dll" | Where-Object { $_.Directory.Name -eq "${{ env.BUILD_CONFIGURATION }}" }
+        if ($testDlls.Count -gt 0) {
+          vstest.console.exe $testDlls.FullName --logger:trx --resultsDirectory:TestResults
+        }
+      continue-on-error: true
+    
+    - name: Comment Test Results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: PR Test Results
+        path: TestResults/*.trx
+        reporter: dotnet-trx
+        fail-on-error: false
+        only-summary: true
+    
+    - name: Check for Version Bump
+      id: version-check
+      run: |
+        $changed = git diff --name-only origin/main...HEAD
+        $versionChanged = $changed -contains "Properties/AssemblyInfo.cs" -or $changed -contains "VERSION.md"
+        echo "VERSION_CHANGED=$versionChanged" >> $env:GITHUB_OUTPUT
+        
+        if ($versionChanged) {
+          echo "✅ Version files updated"
+        } else {
+          echo "ℹ️  No version changes detected"
+        }
+    
+    - name: Validate Code Style
+      run: |
+        Write-Host "Checking for common code style issues..."
+        
+        # Check for TODO comments in production code (excluding test files)
+        $todos = Get-ChildItem -Path "." -Include "*.cs" -Recurse | Where-Object { 
+          $_.FullName -notlike "*Tests*" -and $_.FullName -notlike "*TestUtilities*" 
+        } | Select-String -Pattern "TODO|FIXME|HACK" -CaseSensitive:false
+        
+        if ($todos.Count -gt 0) {
+          Write-Host "⚠️  Found TODO/FIXME comments in production code:"
+          $todos | ForEach-Object { Write-Host "  $($_.Filename):$($_.LineNumber) - $($_.Line.Trim())" }
+        }
+        
+        # Check for large files (> 1000 lines)
+        $largeFiles = Get-ChildItem -Path "." -Include "*.cs" -Recurse | Where-Object { 
+          (Get-Content $_.FullName | Measure-Object -Line).Lines -gt 1000 
+        }
+        
+        if ($largeFiles.Count -gt 0) {
+          Write-Host "⚠️  Found large files (>1000 lines):"
+          $largeFiles | ForEach-Object { Write-Host "  $($_.Name)" }
+        }
+        
+        Write-Host "Code style validation completed"
+
+  pr-feedback:
+    name: PR Feedback
+    runs-on: ubuntu-latest
+    needs: [validate-pr]
+    if: always()
+    
+    steps:
+    - name: PR Success Feedback
+      if: needs.validate-pr.result == 'success'
+      run: |
+        echo "✅ Pull Request validation passed!"
+        echo "📋 Next steps:"
+        echo "  - Review by maintainers"
+        echo "  - Merge when approved"
+    
+    - name: PR Failure Feedback  
+      if: needs.validate-pr.result == 'failure'
+      run: |
+        echo "❌ Pull Request validation failed!"
+        echo "🔧 Please fix the issues and push updates"
+        echo "📋 Common issues to check:"
+        echo "  - Build errors"
+        echo "  - Test failures"
+        echo "  - Code style violations"
