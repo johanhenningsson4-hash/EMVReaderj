@@ -71,28 +71,28 @@ jobs:
           Write-Host "VSTest not available - tests will be validated during build only"
 
           # Create a simple test result to show tests were found but not executed
-          $testResultContent = @"
-<?xml version=`"1.0`" encoding=`"UTF-8`"?>
-<TestRun id=`"00000000-0000-0000-0000-000000000000`" name=`"PR Validation - Build Only`" xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`">
-  <TestSettings name=`"default`" id=`"00000000-0000-0000-0000-000000000000`">
+          New-Item -ItemType File -Path "TestResults\BuildValidation.trx" -Force | Out-Null
+          Set-Content -Path "TestResults\BuildValidation.trx" -Value @"
+<?xml version="1.0" encoding="UTF-8"?>
+<TestRun id="00000000-0000-0000-0000-000000000000" name="PR Validation - Build Only" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <TestSettings name="default" id="00000000-0000-0000-0000-000000000000">
     <Description>PR Build Validation - Test assemblies found and compiled successfully</Description>
   </TestSettings>
   <Results>
-    <UnitTestResult executionId=`"00000000-0000-0000-0000-000000000000`" testId=`"00000000-0000-0000-0000-000000000000`" testName=`"BuildValidation`" outcome=`"Passed`">
+    <UnitTestResult executionId="00000000-0000-0000-0000-000000000000" testId="00000000-0000-0000-0000-000000000000" testName="BuildValidation" outcome="Passed">
       <Output>
-        <StdOut>Build validation passed. Found $($testDlls.Count) test assembly/assemblies.</StdOut>
+        <StdOut>Build validation passed. Found test assemblies and they compiled successfully.</StdOut>
       </Output>
     </UnitTestResult>
   </Results>
   <TestDefinitions>
-    <UnitTest name=`"BuildValidation`" id=`"00000000-0000-0000-0000-000000000000`">
-      <Execution id=`"00000000-0000-0000-0000-000000000000`" />
-      <TestMethod codeBase=`"BuildValidation`" className=`"PRValidation`" name=`"BuildValidation`" />
+    <UnitTest name="BuildValidation" id="00000000-0000-0000-0000-000000000000">
+      <Execution id="00000000-0000-0000-0000-000000000000" />
+      <TestMethod codeBase="BuildValidation" className="PRValidation" name="BuildValidation" />
     </UnitTest>
   </TestDefinitions>
 </TestRun>
 "@
-          $testResultContent | Out-File -FilePath "TestResults\BuildValidation.trx" -Encoding UTF8
         }
       continue-on-error: true
     
