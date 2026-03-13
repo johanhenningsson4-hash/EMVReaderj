@@ -50,6 +50,14 @@ namespace EMVCard.Tests.IntegrationTests
             
             // Send application select
             var appResponse = reader.SendCommand(HexToBytes("00A4040007A0000000031010"));
+
+            // Debug: print actual response values
+            System.Diagnostics.Debug.WriteLine($"App response length: {appResponse.Length}");
+            if (appResponse.Length >= 2)
+            {
+                System.Diagnostics.Debug.WriteLine($"Status bytes: {appResponse[appResponse.Length-2]:X2} {appResponse[appResponse.Length-1]:X2}");
+                System.Diagnostics.Debug.WriteLine($"Last byte as decimal: {appResponse[appResponse.Length-2]}");
+            }
             
             // Send GPO
             var gpoResponse = reader.SendCommand(HexToBytes("80A80000028300"));
@@ -162,11 +170,11 @@ namespace EMVCard.Tests.IntegrationTests
             SetupPSEResponses(reader);
             reader.Connect();
 
-            // Act - Test PSE
-            var pseResponse = reader.SendCommand(HexToBytes("00A4040E31504159.5359532E4444463031"));
-            
-            // Test PPSE
-            var ppseResponse = reader.SendCommand(HexToBytes("00A4040E32504159.5359532E4444463031"));
+            // Act - Test PSE - Fixed hex string (removed extra period)
+            var pseResponse = reader.SendCommand(HexToBytes("00A4040E315041592E5359532E4444463031"));
+
+            // Test PPSE - Fixed hex string (removed extra period)
+            var ppseResponse = reader.SendCommand(HexToBytes("00A4040E325041592E5359532E4444463031"));
 
             // Assert
             Assert.IsTrue(pseResponse.Length >= 2);
@@ -263,15 +271,15 @@ namespace EMVCard.Tests.IntegrationTests
 
         private void SetupVisaCardResponses(MockCardReader reader)
         {
-            // PSE Selection - Fixed hex string (removed extra period)
+            // PSE Selection - Fixed hex string (removed extra period) and add success status code 9000
             reader.QueueResponse("00A4040E315041592E5359532E4444463031", 
-                "6F3E8407A000000003101050084D4153544552A5238801015F2D02656EA31A4F07A00000000310105010564953412043524544495487010150084D4153544552");
+                "6F3E8407A000000003101050084D4153544552A5238801015F2D02656EA31A4F07A00000000310105010564953412043524544495487010150084D41535445529000");
 
-            // Application Selection
+            // Application Selection - Add success status code 9000
             reader.QueueResponse("00A4040007A0000000031010", 
-                "6F2A840EA000000003101050084D4153544552907A5F2D02656EA3148801015F2D02656E9F1101019F120A4D617374657243617264");
+                "6F2A840EA000000003101050084D4153544552907A5F2D02656EA3148801015F2D02656E9F1101019F120A4D6173746572436172649000");
 
-            // GPO
+            // GPO - Already has success status code 9000 at the end
             reader.QueueResponse("80A80000028300", 
                 "80069F360200019F2608123456789ABCDEF09F2701809F1007123456789ABCDEF09F37049ABCDEF09000");
         }
@@ -284,13 +292,13 @@ namespace EMVCard.Tests.IntegrationTests
 
         private void SetupPSEResponses(MockCardReader reader)
         {
-            // PSE - Fixed hex string (removed extra period) 
+            // PSE - Fixed hex string (removed extra period) and add success status code 9000 
             reader.QueueResponse("00A4040E315041592E5359532E4444463031", 
-                "6F2E840E315041592E5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D4153544552");
+                "6F2E840E315041592E5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D41535445529000");
 
-            // PPSE - Fixed hex string (removed extra period)
+            // PPSE - Fixed hex string (removed extra period) and add success status code 9000
             reader.QueueResponse("00A4040E325041592E5359532E4444463031", 
-                "6F2E840E325041592E5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D4153544552");
+                "6F2E840E325041592E5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D41535445529000");
         }
 
         private void SetupSFIRecordResponses(MockCardReader reader)
