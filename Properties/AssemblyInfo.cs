@@ -19,6 +19,9 @@ using System.Runtime.InteropServices;
 // COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
 
+// Make internal members visible to test assembly
+[assembly: InternalsVisibleTo("EMVCard.Tests")]
+
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("E9D21D6F-2DDE-853A-9300-7381F69DE69D")]
 

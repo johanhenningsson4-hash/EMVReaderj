@@ -14,6 +14,19 @@ namespace EMVCard.Tests.UnitTests
     [TestClass]
     public class BufferPoolTests
     {
+        [TestInitialize]
+        public void TestSetup()
+        {
+            // Clear the pool before each test to ensure isolation
+            BufferPool.ClearPool();
+        }
+
+        [TestCleanup]
+        public void TestCleanup()
+        {
+            // Clear the pool after each test to prevent state leakage
+            BufferPool.ClearPool();
+        }
         [TestMethod]
         public void BufferPool_RentSmallBuffer_ReturnsCorrectSize()
         {

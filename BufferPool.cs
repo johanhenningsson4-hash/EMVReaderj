@@ -79,5 +79,14 @@ namespace EMVCard
         {
             return (SmallBuffers.Count, LargeBuffers.Count);
         }
+
+        /// <summary>
+        /// Clear all pooled buffers - for testing purposes only
+        /// </summary>
+        internal static void ClearPool()
+        {
+            while (SmallBuffers.TryDequeue(out _)) { }
+            while (LargeBuffers.TryDequeue(out _)) { }
+        }
     }
 }
