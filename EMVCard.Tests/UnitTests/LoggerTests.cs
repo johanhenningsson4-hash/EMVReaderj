@@ -38,7 +38,7 @@ namespace EMVCard.Tests.UnitTests
             // Configure Logger for testing
             Logger.LogDirectory = testLogDirectory;
             Logger.IsEnabled = true;
-            Logger.MaxLogFileSize = 1024; // 1KB for testing
+            Logger.MaxLogFileSize = 1024; // 1KB for testing rotation
             Logger.MaxLogFiles = 3;
             Logger.Initialize();
         }
@@ -223,39 +223,51 @@ namespace EMVCard.Tests.UnitTests
         [TestMethod]
         public void Logger_ThreadSafety_ConcurrentLogging()
         {
-            // Arrange
-            int threadCount = 10;
-            int messagesPerThread = 10;
-            var tasks = new Task[threadCount];
+            // Arrange - Use large file size to prevent rotation during test
+            long originalMaxSize = Logger.MaxLogFileSize;
+            Logger.MaxLogFileSize = 1024 * 1024; // 1MB - prevent rotation
 
-            // Act
-            for (int i = 0; i < threadCount; i++)
+            try
             {
-                int threadId = i;
-                tasks[i] = Task.Run(() =>
+                int threadCount = 10;
+                int messagesPerThread = 10;
+                var tasks = new Task[threadCount];
+
+                // Act
+                for (int i = 0; i < threadCount; i++)
                 {
-                    for (int j = 0; j < messagesPerThread; j++)
+                    int threadId = i;
+                    tasks[i] = Task.Run(() =>
                     {
-                        Logger.Info($"Thread {threadId}, Message {j}");
-                    }
-                });
+                        for (int j = 0; j < messagesPerThread; j++)
+                        {
+                            Logger.Info($"Thread {threadId}, Message {j}");
+                        }
+                    });
+                }
+
+                Task.WaitAll(tasks);
+                Thread.Sleep(1000); // Allow all writes to complete and flush
+
+                // Assert
+                var logFiles = Directory.GetFiles(testLogDirectory, "*.log");
+                Assert.IsTrue(logFiles.Length > 0, "No log files found");
+
+                int totalMessages = 0;
+                foreach (var file in logFiles)
+                {
+                    var content = File.ReadAllText(file);
+                    totalMessages += content.Split(new[] { "[INFO]" }, StringSplitOptions.RemoveEmptyEntries).Length - 1;
+                }
+
+                Assert.AreEqual(threadCount * messagesPerThread, totalMessages, 
+                    $"Expected {threadCount * messagesPerThread} log entries but found {totalMessages} across {logFiles.Length} files");
             }
-
-            Task.WaitAll(tasks);
-            Thread.Sleep(500); // Allow all writes to complete
-
-            // Assert
-            var logFiles = Directory.GetFiles(testLogDirectory, "*.log");
-            Assert.IsTrue(logFiles.Length > 0);
-
-            int totalMessages = 0;
-            foreach (var file in logFiles)
+            finally
             {
-                var content = File.ReadAllText(file);
-                totalMessages += content.Split(new[] { "[INFO]" }, StringSplitOptions.RemoveEmptyEntries).Length - 1;
+                // Restore original settings
+                Logger.MaxLogFileSize = originalMaxSize;
             }
-
-            Assert.AreEqual(threadCount * messagesPerThread, totalMessages);
         }
 
         [TestMethod]

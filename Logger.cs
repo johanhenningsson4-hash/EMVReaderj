@@ -155,7 +155,7 @@ namespace EMVCard
                 try
                 {
                     string logFilePath = GetCurrentLogFilePath();
-                    
+
                     // Check if rotation is needed
                     if (File.Exists(logFilePath))
                     {
@@ -163,12 +163,22 @@ namespace EMVCard
                         if (fileInfo.Length >= _maxLogFileSize)
                         {
                             RotateLogFiles();
+                            // Re-get the log file path after rotation
+                            logFilePath = GetCurrentLogFilePath();
                         }
                     }
 
-                    // Format and write log entry
+                    // Format log entry
                     string logEntry = FormatLogEntry(level, message);
-                    File.AppendAllText(logFilePath, logEntry, Encoding.UTF8);
+
+                    // Use FileStream with explicit flushing for better reliability
+                    using (var fileStream = new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read))
+                    using (var writer = new StreamWriter(fileStream, Encoding.UTF8))
+                    {
+                        writer.Write(logEntry);
+                        writer.Flush();
+                        fileStream.Flush();
+                    }
                 }
                 catch (Exception ex)
                 {
