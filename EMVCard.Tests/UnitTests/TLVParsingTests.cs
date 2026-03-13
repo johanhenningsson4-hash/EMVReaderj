@@ -446,16 +446,33 @@ namespace EMVCard.Tests.UnitTests
         [TestMethod]
         public void ParseFCI_ApplicationTemplate_ExtractsCorrectData()
         {
-            // Arrange - File Control Information from SELECT response
+            // Test with simple TLV data first to verify ParseSFIRecordHelper works
+            byte[] simpleTlv = new byte[] { 0x6F, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05 }; // Tag 6F, Length 5, Data 01-05
+            var simpleResult = ParseSFIRecordHelper(simpleTlv, simpleTlv.Length);
+            Assert.AreEqual(1, simpleResult.Count, "Simple TLV parsing failed");
+            Assert.IsTrue(simpleResult.ContainsKey(0x6F), "Tag 6F not found in simple test");
+
+            // Now test with our FCI data
             byte[] fciData = CreateSampleFCITemplate();
+
+            // Debug: Check the raw data
+            string dataHex = BitConverter.ToString(fciData).Replace("-", "");
+            Assert.IsTrue(fciData.Length > 0, "FCI data is empty");
+            Assert.AreEqual(0x6F, fciData[0], $"First byte should be 0x6F but is 0x{fciData[0]:X2}. Full data: {dataHex}");
+
+            var initialParse = ParseSFIRecordHelper(fciData, fciData.Length);
+
+            // The issue might be that we're not finding tag 0x6F
+            bool has6F = initialParse.ContainsKey(0x6F);
+            Assert.IsTrue(has6F, $"Tag 6F not found. Available tags: {string.Join(", ", initialParse.Keys.Select(k => $"0x{k:X}"))}. Data length: {fciData.Length}, Hex: {dataHex}");
 
             // Act
             var appData = ParseApplicationTemplate(fciData);
 
             // Assert
-            Assert.IsNotNull(appData);
-            Assert.IsNotNull(appData.AID);
-            Assert.IsNotNull(appData.Label);
+            Assert.IsNotNull(appData, "ParseApplicationTemplate returned null");
+            Assert.IsNotNull(appData.AID, "AID is null");
+            Assert.IsNotNull(appData.Label, "Label is null");
             Assert.IsTrue(appData.PDOL != null || appData.PDOL == null); // PDOL is optional
         }
 
@@ -520,8 +537,11 @@ namespace EMVCard.Tests.UnitTests
             // Check bounds for the first byte
             if (startIndex >= buffer.Length) return 0;
 
-            if (buffer[startIndex] <= 0x80) return buffer[startIndex];
+            // Short form: if bit 7 is 0, bits 6-0 give the length
+            if ((buffer[startIndex] & 0x80) == 0) 
+                return buffer[startIndex];
 
+            // Long form: if bit 7 is 1, bits 6-0 give the number of additional length bytes
             int lenBytes = buffer[startIndex] & 0x7F;
 
             // Check if we have enough bytes for the long form length
@@ -605,9 +625,9 @@ namespace EMVCard.Tests.UnitTests
 
                 // Parse length
                 int dataLength = ParseLongFormLength(record, index);
-                if (dataLength == 0 && record[index] > 0x80) break; // Invalid length, stop parsing
+                if (dataLength == 0 && (record[index] & 0x80) != 0) break; // Invalid long form length, stop parsing
 
-                int lengthBytes = (record[index] <= 0x80) ? 1 : (record[index] & 0x7F) + 1;
+                int lengthBytes = ((record[index] & 0x80) == 0) ? 1 : (record[index] & 0x7F) + 1;
                 index += lengthBytes;
 
                 // Extract data with bounds checking
@@ -999,17 +1019,17 @@ namespace EMVCard.Tests.UnitTests
             var fci = new System.Collections.Generic.List<byte>();
 
             // FCI Template (6F)
-            fci.AddRange(new byte[] { 0x6F, 0x2A }); // Tag + Length
+            fci.AddRange(new byte[] { 0x6F, 0x23 }); // Tag + Length (corrected to 35 bytes)
 
             // DF Name / AID (84)
             fci.AddRange(new byte[] { 0x84, 0x07, 0xA0, 0x00, 0x00, 0x00, 0x03, 0x10, 0x10 });
 
             // FCI Proprietary Template (A5)
-            fci.AddRange(new byte[] { 0xA5, 0x1F });
+            fci.AddRange(new byte[] { 0xA5, 0x18 }); // 24 bytes
 
             // Application Label (50)
             fci.AddRange(new byte[] { 0x50, 0x0A });
-            fci.AddRange(System.Text.Encoding.ASCII.GetBytes("VISA CREDIT"));
+            fci.AddRange(System.Text.Encoding.ASCII.GetBytes("VISA CRED")); // 10 bytes exactly
 
             // PDOL (9F38)
             fci.AddRange(new byte[] { 0x9F, 0x38, 0x09, 0x9F, 0x66, 0x04, 0x9F, 0x02, 0x06, 0x9F, 0x37, 0x04 });
