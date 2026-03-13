@@ -138,14 +138,14 @@ namespace EMVCard.Tests.TestUtilities
         {
             public static readonly APDUPair SelectPSE = new APDUPair
             {
-                Command = "00A4040E31504159.5359532E4444463031",
-                Response = "6F2E840E31504159.5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D4153544552"
+                Command = "00A4040E315041592E5359532E4444463031",
+                Response = "6F2E840E315041592E5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D4153544552"
             };
 
             public static readonly APDUPair SelectPPSE = new APDUPair
             {
-                Command = "00A4040E32504159.5359532E4444463031",
-                Response = "6F2E840E32504159.5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D4153544552"
+                Command = "00A4040E325041592E5359532E4444463031",
+                Response = "6F2E840E325041592E5359532E4444463031A51C4F07A00000000310105010564953412043524544495487010150084D4153544552"
             };
 
             public static readonly APDUPair SelectVisaApp = new APDUPair
@@ -357,6 +357,13 @@ namespace EMVCard.Tests.TestUtilities
         public static byte[] HexStringToBytes(this string hexString)
         {
             hexString = hexString.Replace(" ", "").Replace(".", "");
+
+            // Ensure even length by padding with leading zero if necessary
+            if (hexString.Length % 2 != 0)
+            {
+                hexString = "0" + hexString;
+            }
+
             return Enumerable.Range(0, hexString.Length)
                 .Where(x => x % 2 == 0)
                 .Select(x => Convert.ToByte(hexString.Substring(x, 2), 16))

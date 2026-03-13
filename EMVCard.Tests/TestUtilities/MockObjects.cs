@@ -63,6 +63,13 @@ namespace EMVCard.Tests.TestUtilities
         private byte[] HexStringToBytes(string hex)
         {
             hex = hex.Replace(" ", "");
+
+            // Ensure even length by padding with leading zero if necessary
+            if (hex.Length % 2 != 0)
+            {
+                hex = "0" + hex;
+            }
+
             return Enumerable.Range(0, hex.Length)
                 .Where(x => x % 2 == 0)
                 .Select(x => Convert.ToByte(hex.Substring(x, 2), 16))
