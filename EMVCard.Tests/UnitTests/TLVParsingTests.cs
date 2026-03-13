@@ -474,24 +474,44 @@ namespace EMVCard.Tests.UnitTests
 
         private (string cardNumber, string expiry) ParseTrack2Helper(string track2)
         {
-            // Simplified Track 2 parsing logic
-            int dIndex = track2.IndexOf('D');
-            if (dIndex == -1) dIndex = track2.IndexOf('=');
-            
-            if (dIndex > 0 && track2.Length >= dIndex + 5)
+            // Check for UnionPay format first (starts with 62)
+            if (track2.StartsWith("62"))
             {
-                string cardNumber = track2.Substring(0, dIndex).TrimEnd('F');
-                string expiryYYMM = track2.Substring(dIndex + 1, 4);
+                // For UnionPay, card numbers are typically 16 digits
+                int dIndex = track2.IndexOf('D');
+                if (dIndex == -1) dIndex = track2.IndexOf('=');
+
+                if (dIndex > 0)
+                {
+                    string cardNumber = track2.Substring(0, Math.Min(16, dIndex)).TrimEnd('F');
+                    if (track2.Length >= dIndex + 5)
+                    {
+                        string expiryYYMM = track2.Substring(dIndex + 1, 4);
+                        string expiry = $"20{expiryYYMM.Substring(0, 2)}-{expiryYYMM.Substring(2)}";
+                        return (cardNumber, expiry);
+                    }
+                    return (cardNumber, null);
+                }
+
+                // Fallback: just take first 16 characters if no separator found
+                if (track2.Length >= 16)
+                {
+                    return (track2.Substring(0, 16), null);
+                }
+            }
+
+            // Standard Track 2 parsing logic
+            int separatorIndex = track2.IndexOf('D');
+            if (separatorIndex == -1) separatorIndex = track2.IndexOf('=');
+
+            if (separatorIndex > 0 && track2.Length >= separatorIndex + 5)
+            {
+                string cardNumber = track2.Substring(0, separatorIndex).TrimEnd('F');
+                string expiryYYMM = track2.Substring(separatorIndex + 1, 4);
                 string expiry = $"20{expiryYYMM.Substring(0, 2)}-{expiryYYMM.Substring(2)}";
                 return (cardNumber, expiry);
             }
-            
-            // Handle UnionPay format
-            if (track2.StartsWith("62") && track2.Length >= 16)
-            {
-                return (track2.Substring(0, 16), null);
-            }
-            
+
             return (null, null);
         }
 
