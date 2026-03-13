@@ -389,6 +389,13 @@ namespace EMVCard.Tests.UnitTests
             // Act
             var applications = ParsePSEApplications(pseResponse);
 
+            // Debug: Log the applications found
+            System.Diagnostics.Debug.WriteLine($"Found {applications.Count} applications:");
+            foreach (var app in applications)
+            {
+                System.Diagnostics.Debug.WriteLine($"  AID: {app.AID}, Label: {app.Label}, Priority: {app.Priority}");
+            }
+
             // Assert
             Assert.AreEqual(3, applications.Count);
 
@@ -497,9 +504,16 @@ namespace EMVCard.Tests.UnitTests
 
         private int ParseLongFormLength(byte[] buffer, int startIndex)
         {
+            // Check bounds for the first byte
+            if (startIndex >= buffer.Length) return 0;
+
             if (buffer[startIndex] <= 0x80) return buffer[startIndex];
-            
+
             int lenBytes = buffer[startIndex] & 0x7F;
+
+            // Check if we have enough bytes for the long form length
+            if (startIndex + 1 + lenBytes > buffer.Length) return 0;
+
             int length = 0;
             for (int i = 0; i < lenBytes; i++)
             {
@@ -510,10 +524,14 @@ namespace EMVCard.Tests.UnitTests
 
         private int ParseTag(byte[] buffer, int startIndex)
         {
+            // Check bounds for the first byte
+            if (startIndex >= buffer.Length) return 0;
+
             byte firstByte = buffer[startIndex];
             if ((firstByte & 0x1F) == 0x1F)
             {
-                // Two-byte tag
+                // Two-byte tag - check if we have enough bytes
+                if (startIndex + 1 >= buffer.Length) return firstByte; // Return single byte if not enough data
                 return (firstByte << 8) | buffer[startIndex + 1];
             }
             return firstByte;
@@ -560,20 +578,27 @@ namespace EMVCard.Tests.UnitTests
             var result = new System.Collections.Generic.Dictionary<int, byte[]>();
             int index = 0;
 
-            while (index < length)
+            while (index < length && index < record.Length)
             {
                 // Parse tag
                 int tag = ParseTag(record, index);
+                if (tag == 0) break; // Invalid tag, stop parsing
+
                 int tagLength = (tag > 0xFF) ? 2 : 1;
                 index += tagLength;
 
+                // Check bounds before parsing length
+                if (index >= record.Length) break;
+
                 // Parse length
                 int dataLength = ParseLongFormLength(record, index);
+                if (dataLength == 0 && record[index] > 0x80) break; // Invalid length, stop parsing
+
                 int lengthBytes = (record[index] <= 0x80) ? 1 : (record[index] & 0x7F) + 1;
                 index += lengthBytes;
 
-                // Extract data
-                if (index + dataLength <= length)
+                // Extract data with bounds checking
+                if (index + dataLength <= length && index + dataLength <= record.Length)
                 {
                     byte[] data = new byte[dataLength];
                     Array.Copy(record, index, data, 0, dataLength);
@@ -582,7 +607,7 @@ namespace EMVCard.Tests.UnitTests
                 }
                 else
                 {
-                    break; // Malformed record
+                    break; // Malformed record or insufficient data
                 }
             }
 
@@ -841,32 +866,32 @@ namespace EMVCard.Tests.UnitTests
             var response = new System.Collections.Generic.List<byte>();
 
             // FCI Template (6F)
-            response.AddRange(new byte[] { 0x6F, 0x4A }); // Tag + Length
+            response.AddRange(new byte[] { 0x6F, 0x5B }); // Tag + Length (91 bytes total)
 
             // DF Name (84) - PSE
             response.AddRange(new byte[] { 0x84, 0x0E, 0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31 });
 
             // FCI Proprietary Template (A5)
-            response.AddRange(new byte[] { 0xA5, 0x38 });
+            response.AddRange(new byte[] { 0xA5, 0x49 }); // 73 bytes
 
             // Application 1 - Visa
-            response.AddRange(new byte[] { 0x61, 0x15 }); // Application Template
+            response.AddRange(new byte[] { 0x61, 0x18 }); // Application Template (24 bytes)
             response.AddRange(new byte[] { 0x4F, 0x07, 0xA0, 0x00, 0x00, 0x00, 0x03, 0x10, 0x10 }); // AID
-            response.AddRange(new byte[] { 0x50, 0x0A }); // Application Label
+            response.AddRange(new byte[] { 0x50, 0x0B }); // Application Label (11 chars)
             response.AddRange(System.Text.Encoding.ASCII.GetBytes("VISA CREDIT"));
             response.AddRange(new byte[] { 0x87, 0x01, 0x01 }); // Priority
 
             // Application 2 - Mastercard  
-            response.AddRange(new byte[] { 0x61, 0x13 }); // Application Template
+            response.AddRange(new byte[] { 0x61, 0x16 }); // Application Template (22 bytes)
             response.AddRange(new byte[] { 0x4F, 0x07, 0xA0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10 }); // AID
-            response.AddRange(new byte[] { 0x50, 0x0A }); // Application Label
+            response.AddRange(new byte[] { 0x50, 0x0A }); // Application Label (10 chars)
             response.AddRange(System.Text.Encoding.ASCII.GetBytes("MASTERCARD"));
             response.AddRange(new byte[] { 0x87, 0x01, 0x02 }); // Priority
 
             // Application 3 - Another Visa
-            response.AddRange(new byte[] { 0x61, 0x12 }); // Application Template
+            response.AddRange(new byte[] { 0x61, 0x15 }); // Application Template (21 bytes)
             response.AddRange(new byte[] { 0x4F, 0x07, 0xA0, 0x00, 0x00, 0x00, 0x03, 0x20, 0x10 }); // AID
-            response.AddRange(new byte[] { 0x50, 0x09 }); // Application Label
+            response.AddRange(new byte[] { 0x50, 0x0A }); // Application Label (10 chars)
             response.AddRange(System.Text.Encoding.ASCII.GetBytes("VISA DEBIT"));
             response.AddRange(new byte[] { 0x87, 0x01, 0x03 }); // Priority
 
